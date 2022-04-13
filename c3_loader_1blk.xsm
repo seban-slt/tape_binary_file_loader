@@ -1,0 +1,84 @@
+	opt	h-f+
+
+BPTR	equ	$3D
+
+SETGFX	equ	$EF9C
+
+BOOTERR	equ	$C63E
+CASRDB	equ	$FD7A
+CASCLS	equ	$FDCF
+
+	org	$36b
+
+rts	dta	$60,$01,a($36b),c"SI"
+
+st	stx	$d301		; turn-off BASIC (default X reg. value after BOOT is $FF)
+	sta	$bfd5		; put HI-byte of BOOT load address at screen (this will be "#" because load adr. is $036b)
+
+	lsr	BPTR		; init buffer pointer...
+	ror	BPTR		; to $80 value, to get next record from tape
+
+nxt_lp	ldx	<rts		; set default INIT address to "RTS"
+	ldy	>rts
+	stx	$2e2
+	sty	$2e3
+
+ldr_lp	jsr	CASRDB		; read byte from stream ("C:")
+	cpy	#$88		; check for EOF
+	beq	eof		; jump when End of File is occured
+
+	sta	seg_ptr+1	; store lo-byte of load address
+
+	jsr	CASRDB		; read byte from stream
+	sta	seg_ptr+2	; store hi-byte of load address
+	and	seg_ptr+1	; mask with lo-byte
+	cmp	#$ff		; chcek if those two bytes was $FFFF (binary file header)
+	beq	ldr_lp		; get next bytes when file header is detected!
+
+	jsr	CASRDB		; read lo-byte of end of data segment address
+	clc
+	adc	#1		; +1 (lo-byte)
+	sta	sge_l+1		; store incremented lo-byte of end-of-segment address in code body
+
+	php			; store status register of stack (we need "carry" bit value later)
+
+	jsr	CASRDB		; read hi-byte of end of data segment address
+
+	plp			; restore status register
+	adc	#0		; add carry bit to hi-byte
+	sta	sge_h+1		; store hi-byte of end-of-segment address in code body
+
+seg_lp	jsr	CASRDB		; read byte from stream
+	bmi	err		; jump if error was detected
+	
+seg_ptr	sta	$ffff		; store received byte in memory
+
+	inw	seg_ptr+1	; increment data pointer
+
+	lda	seg_ptr+1	; compare actual address with end-of-segment address
+sge_l	cmp	#0
+	lda	seg_ptr+2
+sge_h	sbc	#0
+	bcc	seg_lp		; loop util end of segment data!
+	
+	jsr	init		; call INIT (if any was present)
+
+	jmp	nxt_lp		; jump to load next segment!
+
+init	jsr	CASCLS		; stop motor
+	jmp	($2e2)		; call INIT vector
+
+eof	jsr	CASCLS		; stop motor
+	jmp	($2e0)		; call RUN vector
+
+err	lda	#0		; set graphics mode to #0
+	jsr	SETGFX		; open screen editor
+	jsr	BOOTERR		; display "BOOT ERROR" message
+	bne	*		; infinity loop
+
+	org	$3ea		; last byte of loader record located @ $3EA ...
+	brk			; ... must be set to zero (to terminate boot process)
+
+;	ins	'monty16k.xex'
+;	ins	'draconus.hdr.exo.xex'
+;	ins	'invasion.xex'

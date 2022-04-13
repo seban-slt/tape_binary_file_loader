@@ -1,0 +1,73 @@
+	opt	h-f+
+
+BPTR	equ	$3D
+
+BOOTERR	equ	$C63E
+CASRDB	equ	$FD7A
+CASCLS	equ	$FDCF
+
+	org	$700
+
+rts	dta	$60,$01,a($700),a($e474)
+
+st	dec	BPTR
+
+cpl	jsr	CASRDB
+	sta	$0780,x
+	ldx	BPTR
+	bpl	cpl
+
+nxt_lp	ldx	<rts
+	ldy	>rts
+	stx	$2e2
+	sty	$2e3
+
+ldr_lp	jsr	CASRDB
+	cpy	#$88
+	beq	eof
+
+	sta	seg_ptr+1
+	jsr	CASRDB
+	sta	seg_ptr+2
+	and	seg_ptr+1
+	cmp	#$ff
+	beq	ldr_lp
+
+	jsr	CASRDB
+	clc
+	adc	#1
+	sta	sge_l+1
+	php
+	jsr	CASRDB
+	plp
+	adc	#0
+	sta	sge_h+1
+
+seg_lp	jsr	CASRDB
+	bmi	err
+	
+seg_ptr	sta	$ffff
+
+	inw	seg_ptr+1
+
+	lda	seg_ptr+1
+sge_l	cmp	#0
+	lda	seg_ptr+2
+sge_h	sbc	#0
+	bcc	seg_lp
+
+	jsr	init
+	jmp	nxt_lp
+
+init	jmp	($2e2)
+
+eof	jsr	CASCLS
+	jmp	($2e0)
+
+err	jsr	BOOTERR
+	jmp	*
+
+	org	$7fe
+	dta	d'C3'
+
+	ins	'monty16k.xex'
