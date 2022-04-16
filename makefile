@@ -4,8 +4,8 @@ def:
 	rm -f "c3_loader.cas"
 	./a8cas-util.pl conv c3_loader.boot c3_loader.hex
 
-std:
-	xasm c3_loader.xsm -o c3_loader.boot
+pg7:
+	xasm c3_loader_pg7.xsm -o c3_loader.boot
 	rm -f "c3_loader.hex"
 	rm -f "c3_loader.cas"
 	./a8cas-util.pl conv c3_loader.boot c3_loader.hex
@@ -13,4 +13,4 @@ std:
 cas:
 	rm -f "c3_loader.cas"
 	./a8cas-util.pl conv c3_loader.hex c3_loader.cas
-	cp "c3_loader.cas" /media/sf_sf/
+	cp "c3_loader.cas" /media/sf_SF/

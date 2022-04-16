@@ -1,22 +1,20 @@
- -----------------------------------------------------------------------------
+; -----------------------------------------------------------------------------
 ;
 ; "Code3 Ultra Tiny Tape Binary file loader"
-;
-; >>> ONE BLOCK version <<<
 ;
 ; done by Seban / Code3^Slight
 ;
 ; 1st (2 block/records) version was released in the early nineties
-; 2nd (1 block/record ) version was released in 2022 (one block trick inspired AST loader by Pecus)
 ;
-;
-; .O.   source code published at 2022.04.16 @ GitHub
+; .O.	source code published at 2022.04.16 @ GitHub
 ; ..O
-; OOO   >>> Public Domain <<<
+; OOO	>>> Public Domain <<<
 ;
 ; >>> use XASM to compile
 
 	opt	h-f+
+
+ldr_loc	equ	$0700
 
 BPTR	equ	$3D
 
@@ -25,15 +23,22 @@ BOOTERR	equ	$C63E		; OS-ROM "BOOT ERROR" message
 CASRDB	equ	$FD7A		; OS-ROM CASsette ReaD Block
 CASCLS	equ	$FDCF		; OS-ROM Cassette Close
 
-	org	$36b		; start of code! don't change! (dirty hack! must be placed at this address!)
+	org	ldr_loc		; start of code!
 
-rts	dta	$60,$01,a($36b),c"SI"
+rts	dta	$60,$01,a(ldr_loc),c"SI"
 
-st	stx	$d301		; turn-off BASIC (default X reg. value after BOOT is $FF)
-	sta	$bfd5		; put HI-byte of BOOT load address at screen (this will be "#" because load adr. is $036b)
+st	ldx	#$ff
+	stx	$d301		; turn-off BASIC
+	sta	$bfd5		; put HI-byte of BOOT load address at screen (this will be ' because load adr. is $0700)
 
-	lsr	BPTR		; init buffer pointer...
-	ror	BPTR		; to $80 value, to get next record from tape
+	inx
+	stx	BPTR
+
+cpl	jsr	CASRDB		; copy record data from cassette buffer to loader loc. in RAM
+	sta	ldr_loc+$80,x
+	ldx	BPTR
+	bpl	cpl
+
 
 nxt_lp	ldx	<rts		; set default INIT address to "RTS"
 	ldy	>rts
@@ -45,9 +50,12 @@ ldr_lp	jsr	CASRDB		; read byte from stream ("C:")
 	beq	eof		; jump when End of File is occured
 
 	sta	seg_ptr+1	; store lo-byte of load address
+once_l	sta	$2e0
 
 	jsr	CASRDB		; read byte from stream
 	sta	seg_ptr+2	; store hi-byte of load address
+once_h	sta	$2e1
+
 	and	seg_ptr+1	; mask with lo-byte
 	cmp	#$ff		; chcek if those two bytes was $FFFF (binary file header)
 	beq	ldr_lp		; get next bytes when file header is detected!
@@ -56,7 +64,6 @@ ldr_lp	jsr	CASRDB		; read byte from stream ("C:")
 	clc
 	adc	#1		; +1 (lo-byte)
 	sta	sge_l+1		; store incremented lo-byte of end-of-segment address in code body
-
 	php			; store status register of stack (we need "carry" bit value later)
 
 	jsr	CASRDB		; read hi-byte of end of data segment address
@@ -65,10 +72,14 @@ ldr_lp	jsr	CASRDB		; read byte from stream ("C:")
 	adc	#0		; add carry bit to hi-byte
 	sta	sge_h+1		; store hi-byte of end-of-segment address in code body
 
+	lda	#$2c		; only first segment will be can be a RUN address!
+	sta	once_l
+	sta	once_h
+
 seg_lp	jsr	CASRDB		; read byte from stream
 	bmi	err		; jump if error was detected
 	
-seg_ptr	sta	$ffff		; store received byte in memory
+seg_ptr	sta	$c0de		; store received byte in memory
 
 	inw	seg_ptr+1	; increment data pointer
 
@@ -93,5 +104,5 @@ err	lda	#0		; set graphics mode to #0
 	jsr	BOOTERR		; display "BOOT ERROR" message
 	bne	*		; infinity loop
 
-	org	$3ea		; last byte of loader record located @ $3EA ...
-	brk			; ... must be set to zero (to terminate boot process)
+	org	ldr_loc+$ff	
+	brk			; fill to end of data-record
